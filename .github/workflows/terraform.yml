@@ -9,12 +9,22 @@ on:
     branches:
       - main
 
+
+  workflow_dispatch:
+
 permissions:
   contents: read
 
+env:
+  TF_VERSION: "1.9.8"
+
 jobs:
-  terraform:
-    name: Terraform Validate
+
+  # =========================
+  # CI
+  # =========================
+  terraform-ci:
+    name: Terraform CI
     runs-on: ubuntu-latest
 
     defaults:
@@ -22,11 +32,14 @@ jobs:
         working-directory: enviroment/dev
 
     steps:
-      - name: Checkout repository
+
+      - name: Checkout code
         uses: actions/checkout@v4
 
       - name: Setup Terraform
         uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: ${{ env.TF_VERSION }}
 
       - name: Terraform Format Check
         run: terraform fmt -check -recursive
@@ -36,3 +49,43 @@ jobs:
 
       - name: Terraform Validate
         run: terraform validate
+
+      - name: Terraform Plan
+        run: terraform plan
+
+
+  # =========================
+  # CD
+  # =========================
+  terraform-cd:
+    name: Terraform CD
+    needs: terraform-ci
+
+    # IMPORTANT:
+    # CD only after merge/push to main
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+
+    runs-on: ubuntu-latest
+
+    environment:
+      name: production
+
+    defaults:
+      run:
+        working-directory: enviroment/dev
+
+    steps:
+
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: ${{ env.TF_VERSION }}
+
+      - name: Terraform Init
+        run: terraform init
+
+      - name: Terraform Apply
+        run: terraform apply -auto-approve
